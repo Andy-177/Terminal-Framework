@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>极简终端</title>
+  <style>
+    * { margin: 0; padding: 0; }
+    body { 
+      background: #000; 
+      color: #fff; 
+      font-family: Consolas, Monaco, 'Courier New', monospace, SimHei, 'Microsoft YaHei';
+      height: 100vh;
+      overflow: hidden;
+    }
+    #terminal {
+      white-space: pre-wrap;
+      height: 100%;
+      overflow-y: auto;
+      padding: 1rem;
+      box-sizing: border-box;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .cursor { 
+      animation: blink 1s step-end infinite;
+      color: rgb(255, 255, 255);
+    }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+
+  <script>
+    const terminal = document.getElementById('terminal');
+    let inputBuffer = '';
+    
+    // 渲染终端内容
+    function render() {
+      terminal.innerHTML = inputBuffer + '<span class="cursor">█</span>';
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+    
+    // 键盘事件处理
+    document.addEventListener('keydown', (e) => {
+      // 阻止默认行为避免不必要的滚动
+      e.preventDefault();
+      
+      switch(e.key) {
+        case 'Enter':
+          // 仅添加换行，不处理命令
+          inputBuffer += '\n';
+          render();
+          break;
+          
+        case 'Backspace':
+          if (inputBuffer.length > 0) {
+            inputBuffer = inputBuffer.slice(0, -1);
+            render();
+          }
+          break;
+          
+        default:
+          // 只处理可打印字符
+          if (e.key.length === 1) {
+            inputBuffer += e.key;
+            render();
+          }
+      }
+    });
+    
+    // 初始化渲染
+    render();
+    
+    // 自动聚焦终端
+    terminal.focus();
+    document.addEventListener('click', () => {
+      terminal.focus();
+    });
+</script>
+</body>
+</html>
