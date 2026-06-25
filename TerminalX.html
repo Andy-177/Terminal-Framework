@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TerminalX</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      background: #0c0c0c; 
+      color: #e0e0e0; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* 标签栏 — 横向滚动 */
+    .tab-bar {
+      touch-action: none;
+      display: flex;
+      background: #1e1e1e;
+      padding: 0 0.5rem;
+      flex-shrink: 0;
+      min-height: 44px;
+      align-items: flex-end;
+      gap: 3px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+      flex-wrap: nowrap;
+      /* 平滑滚动 */
+      scroll-behavior: smooth;
+    }
+    .tab-bar::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* 标签 — 初始宽度 256px */
+    .tab {
+      display: flex;
+      align-items: center;
+      padding: 7px 10px 7px 16px;
+      background: #2a2a2a;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.15s, color 0.15s;
+      position: relative;
+      white-space: nowrap;
+      gap: 8px;
+      width: 256px;
+      min-width: 256px;
+      flex-shrink: 0;
+      flex-grow: 0;
+      flex-basis: 256px;
+      max-width: 360px;
+    }
+    .tab:hover {
+      background: #333;
+      color: #ddd;
+    }
+    .tab.active {
+      background: #0c0c0c;
+      color: #fff;
+      flex-shrink: 0;
+      flex-basis: 256px;
+    }
+
+    /* 空间不足时缩小 */
+    .tab.shrinkable {
+      flex-shrink: 1 !important;
+      min-width: 80px;
+      flex-basis: auto;
+    }
+
+    .tab .tab-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      min-width: 20px;
+      font-weight: 400;
+      letter-spacing: 0.3px;
+    }
+
+    .tab .close-btn {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      width: 20px;
+      height: 20px;
+      background: transparent;
+      color: #888;
+      font-size: 16px;
+      line-height: 16px;
+      transition: background 0.2s, color 0.2s;
+      cursor: pointer;
+      border: none;
+      padding: 0;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+    .tab .close-btn:hover {
+      color: #fff;
+    }
+
+    .tab-add {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      margin-left: 4px;
+      margin-bottom: 3px;
+      color: #aaa;
+      font-size: 26px;
+      font-weight: 300;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+      background: #1e1e1e;
+      border: none;
+      flex-shrink: 0;
+      position: sticky;
+      right: 0;
+      z-index: 10;
+    }
+    .tab-add:hover {
+      background: #3a3a3a;
+      color: #fff;
+    }
+
+    /* 终端容器 */
+    .terminal-wrapper {
+      flex: 1;
+      position: relative;
+      background: #0c0c0c;
+      overflow: hidden;
+    }
+
+    .terminal-pane {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      padding: 1rem;
+      white-space: pre-wrap;
+      overflow-y: auto;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 1.1rem;
+      line-height: 1.5;
+      color: #e0e0e0;
+      background: #0c0c0c;
+      scrollbar-width: thin;
+      scrollbar-color: #444 #0c0c0c;
+      display: none;
+      /* 平滑滚动 */
+      scroll-behavior: smooth;
+    }
+    .terminal-pane.active {
+      display: block;
+    }
+    .terminal-pane::-webkit-scrollbar {
+      width: 6px;
+    }
+    .terminal-pane::-webkit-scrollbar-thumb {
+      background: #444;
+    }
+    .terminal-pane::-webkit-scrollbar-track {
+      background: #0c0c0c;
+    }
+
+    .cursor {
+      animation: blink 1s step-end infinite;
+      color: #ffffff;
+      font-weight: 300;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .status-bar {
+      background: #1a1a1a;
+      color: #777;
+      padding: 4px 16px;
+      font-size: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      flex-shrink: 0;
+      min-height: 28px;
+      align-items: center;
+    }
+    .status-bar span {
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="tab-bar" id="tabBar">
+    <button class="tab-add" id="addTabBtn" title="新建标签 (Ctrl+T)">+</button>
+  </div>
+
+  <div class="terminal-wrapper" id="terminalWrapper"></div>
+
+  <div class="status-bar">
+    <span id="tabCounter">标签: 1</span>
+    <span id="clock"></span>
+  </div>
+
+  <script>
+    (function() {
+      // ---------- 状态 ----------
+      let tabs = [];
+      let activeTabId = null;
+      let nextId = 1;
+
+      const tabBar = document.getElementById('tabBar');
+      const wrapper = document.getElementById('terminalWrapper');
+      const tabCounter = document.getElementById('tabCounter');
+
+      function createDefaultTab() {
+        return {
+          id: nextId++,
+          title: '终端',
+          content: ''
+        };
+      }
+
+      tabs.push(createDefaultTab());
+      activeTabId = tabs[0].id;
+
+      // ---------- 核心：智能伸缩控制 ----------
+      function applyShrinkLogic() {
+        const tabEls = Array.from(tabBar.querySelectorAll('.tab'));
+        if (tabEls.length === 0) return;
+
+        // 先移除所有 shrinkable 类
+        tabEls.forEach(el => el.classList.remove('shrinkable'));
+
+        // 判断是否溢出
+        const barWidth = tabBar.scrollWidth;
+        const clientWidth = tabBar.clientWidth;
+
+        if (barWidth <= clientWidth) {
+          return;
+        }
+
+        // 空间不足：让所有非激活标签可缩小
+        tabEls.forEach(el => {
+          const id = parseInt(el.dataset.tabId);
+          if (id !== activeTabId) {
+            el.classList.add('shrinkable');
+          }
+        });
+      }
+
+      // ---------- 滚动辅助函数 ----------
+      function scrollTabToView(tabId, behavior = 'smooth') {
+        const tabEl = tabBar.querySelector(`.tab[data-tab-id="${tabId}"]`);
+        if (!tabEl) return;
+
+        const addBtn = tabBar.querySelector('.tab-add');
+        const addBtnWidth = addBtn ? addBtn.offsetWidth + 8 : 40;
+
+        const containerRect = tabBar.getBoundingClientRect();
+        const tabRect = tabEl.getBoundingClientRect();
+
+        const rightBoundary = containerRect.right - addBtnWidth;
+
+        if (tabRect.left >= containerRect.left && tabRect.right <= rightBoundary) {
+          return;
+        }
+
+        const scrollLeft = tabBar.scrollLeft + (tabRect.left - containerRect.left) - 20;
+        tabBar.scrollTo({
+          left: scrollLeft,
+          behavior: behavior
+        });
+      }
+
+      function scrollPaneToBottom(pane) {
+        if (!pane) return;
+        // 使用 requestAnimationFrame 确保 DOM 更新后再滚动
+        requestAnimationFrame(() => {
+          pane.scrollTop = pane.scrollHeight;
+        });
+      }
+
+      // ---------- 渲染 ----------
+      function renderAll() {
+        // 1. 渲染标签
+        const addBtn = tabBar.querySelector('.tab-add');
+        Array.from(tabBar.children).forEach(child => {
+          if (!child.classList.contains('tab-add')) child.remove();
+        });
+
+        tabs.forEach(tab => {
+          const tabEl = document.createElement('div');
+          tabEl.className = 'tab' + (tab.id === activeTabId ? ' active' : '');
+          tabEl.dataset.tabId = tab.id;
+
+          const titleSpan = document.createElement('span');
+          titleSpan.className = 'tab-title';
+          titleSpan.textContent = tab.title || '终端';
+          tabEl.appendChild(titleSpan);
+
+          const closeBtn = document.createElement('button');
+          closeBtn.className = 'close-btn';
+          closeBtn.innerHTML = '✕';
+          closeBtn.title = '关闭标签';
+          if (tabs.length <= 1) {
+            closeBtn.style.display = 'none';
+          }
+          closeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+          closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeTab(tab.id);
+          });
+          tabEl.appendChild(closeBtn);
+
+          tabEl.addEventListener('click', () => {
+            switchTab(tab.id);
+          });
+
+          tabBar.insertBefore(tabEl, addBtn);
+        });
+
+        // 2. 渲染终端 pane
+        wrapper.innerHTML = '';
+        tabs.forEach(tab => {
+          const pane = document.createElement('div');
+          pane.className = 'terminal-pane' + (tab.id === activeTabId ? ' active' : '');
+          pane.dataset.tabId = tab.id;
+          const textNode = document.createTextNode(tab.content);
+          pane.appendChild(textNode);
+          const cursorSpan = document.createElement('span');
+          cursorSpan.className = 'cursor';
+          cursorSpan.textContent = '|';
+          pane.appendChild(cursorSpan);
+          wrapper.appendChild(pane);
+        });
+
+        // 更新状态栏
+        tabCounter.textContent = `标签: ${tabs.length}`;
+
+        // 应用伸缩逻辑
+        applyShrinkLogic();
+
+        // 滚动到激活标签可见
+        scrollTabToView(activeTabId, 'smooth');
+
+        // 滚动到激活pane底部
+        const activePane = wrapper.querySelector('.terminal-pane.active');
+        scrollPaneToBottom(activePane);
+      }
+
+      // ---------- 切换标签 ----------
+      function switchTab(tabId) {
+        if (tabId === activeTabId) return;
+        activeTabId = tabId;
+
+        const allTabs = tabBar.querySelectorAll('.tab');
+        allTabs.forEach(el => {
+          const id = parseInt(el.dataset.tabId);
+          el.classList.toggle('active', id === activeTabId);
+        });
+
+        const panes = wrapper.querySelectorAll('.terminal-pane');
+        panes.forEach(pane => {
+          const id = parseInt(pane.dataset.tabId);
+          pane.classList.toggle('active', id === activeTabId);
+        });
+
+        // 重新应用伸缩逻辑
+        applyShrinkLogic();
+
+        // 滚动到激活标签可见
+        scrollTabToView(activeTabId, 'smooth');
+
+        // 滚动到激活pane底部
+        const activePane = wrapper.querySelector('.terminal-pane.active');
+        scrollPaneToBottom(activePane);
+      }
+
+      // ---------- 关闭标签 ----------
+      function closeTab(tabId) {
+        if (tabs.length <= 1) return;
+        const index = tabs.findIndex(t => t.id === tabId);
+        if (index === -1) return;
+
+        let newActiveId = activeTabId;
+        if (tabId === activeTabId) {
+          const nextIndex = Math.min(index + 1, tabs.length - 1);
+          const prevIndex = Math.max(index - 1, 0);
+          const targetIndex = (nextIndex < tabs.length && nextIndex !== index) ? nextIndex : prevIndex;
+          newActiveId = tabs[targetIndex].id;
+        }
+
+        tabs = tabs.filter(t => t.id !== tabId);
+        activeTabId = newActiveId;
+        renderAll();
+        // 确保切换后正确滚动
+        setTimeout(() => {
+          switchTab(activeTabId);
+        }, 50);
+      }
+
+      // ---------- 新建标签 ----------
+      function createNewTab() {
+        const newTab = {
+          id: nextId++,
+          title: '终端',
+          content: ''
+        };
+        tabs.push(newTab);
+        activeTabId = newTab.id;
+        renderAll();
+        // 确保新标签可见
+        setTimeout(() => {
+          switchTab(activeTabId);
+        }, 50);
+      }
+
+      // ---------- 键盘输入 ----------
+      function handleKeyDown(e) {
+        if (e.ctrlKey || e.metaKey) {
+          if (e.key === 't') {
+            e.preventDefault();
+            createNewTab();
+            return;
+          }
+          if (e.key === 'w') {
+            e.preventDefault();
+            if (tabs.length > 1) {
+              closeTab(activeTabId);
+            }
+            return;
+          }
+          return;
+        }
+
+        e.preventDefault();
+
+        const activePane = wrapper.querySelector('.terminal-pane.active');
+        if (!activePane) return;
+        const tabId = parseInt(activePane.dataset.tabId);
+        const tab = tabs.find(t => t.id === tabId);
+        if (!tab) return;
+
+        switch(e.key) {
+          case 'Enter':
+            tab.content += '\n';
+            break;
+          case 'Backspace':
+            if (tab.content.length > 0) {
+              tab.content = tab.content.slice(0, -1);
+            }
+            break;
+          default:
+            if (e.key.length === 1) {
+              tab.content += e.key;
+            }
+        }
+
+        // 更新所有pane
+        const panes = wrapper.querySelectorAll('.terminal-pane');
+        panes.forEach(pane => {
+          const id = parseInt(pane.dataset.tabId);
+          const foundTab = tabs.find(t => t.id === id);
+          if (foundTab) {
+            pane.innerHTML = '';
+            const textNode = document.createTextNode(foundTab.content);
+            pane.appendChild(textNode);
+            const cursorSpan = document.createElement('span');
+            cursorSpan.className = 'cursor';
+            cursorSpan.textContent = '|';
+            pane.appendChild(cursorSpan);
+          }
+        });
+
+        // 滚动到当前pane底部
+        scrollPaneToBottom(activePane);
+      }
+
+      // ---------- 事件监听 ----------
+      document.addEventListener('keydown', handleKeyDown);
+
+      document.getElementById('addTabBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        createNewTab();
+      });
+
+      document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      // 窗口resize 重新应用伸缩逻辑
+      window.addEventListener('resize', () => {
+        applyShrinkLogic();
+        const activePane = wrapper.querySelector('.terminal-pane.active');
+        if (activePane) {
+          scrollPaneToBottom(activePane);
+        }
+      });
+
+      // 鼠标滚轮 → 横向滚动标签栏
+      tabBar.addEventListener('wheel', (e) => {
+        const delta = e.deltaY || e.deltaX;
+        if (Math.abs(delta) < 1) return;
+        e.preventDefault();
+        tabBar.scrollLeft += delta;
+      }, { passive: false });
+
+      // 触控 → 横向滚动标签栏
+      let touchStartX = 0;
+      let touchStartScrollLeft = 0;
+      tabBar.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartScrollLeft = tabBar.scrollLeft;
+      }, { passive: true });
+      tabBar.addEventListener('touchmove', (e) => {
+        const clientX = e.touches[0].clientX;
+        const deltaX = touchStartX - clientX;
+        tabBar.scrollLeft = touchStartScrollLeft + deltaX;
+      }, { passive: true });
+
+      // 实时时钟
+      const clock = document.getElementById('clock');
+      function updateClock() {
+        const now = new Date();
+        clock.textContent = now.toLocaleTimeString('zh-CN', { hour12: false });
+      }
+      updateClock();
+      setInterval(updateClock, 1000);
+
+      // 启动
+      renderAll();
+      setTimeout(() => {
+        switchTab(activeTabId);
+      }, 100);
+    })();
+  </script>
+</body>
+</html>
